@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
+<title>SART (mobile)</title>
+<style>
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#000; color:#fff; display:flex; flex-direction:column; height:100vh; }
+  .screen { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:1rem; box-sizing:border-box; }
+  .big-number { font-size: 18vw; font-weight:700; text-align:center; line-height:1; user-select:none; }
+  .mask { font-size: 10vw; color:#fff; opacity:0.6; }
+  .response-bar { width:90%; margin-bottom:5vh; padding:0.5rem; box-sizing:border-box; background:#0b7; color:#000; text-align:center; font-size:5vw; font-weight:700; border-radius:12px; touch-action: manipulation; position:fixed; bottom:5vh; left:5%; }
+  .btn { display:inline-block; background:#0b7; color:#000; padding:0.8rem 1rem; border-radius:10px; font-size:4.5vw; font-weight:700; margin:0.2rem; min-width:120px; text-align:center; }
+  .controls { display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:center; margin-top:0.5rem; }
+  .small { font-size:3.5vw; opacity:0.9; }
+  .center { text-align:center; }
+  .hidden { display:none !important; }
+  .instr { font-size:4.2vw; line-height:1.3; max-width:850px; }
+  footer { padding:0.5rem; text-align:center; font-size:3.5vw; color:#999; }
+</style>
+</head>
+<body>
+
+<div id="page" class="screen">
+  <div id="content" class="center">
+    <div id="stage">
+      <h1 style="font-size:6vw">SART</h1>
+      <div id="instructions" class="instr center">
+        <p>Press the big bar "Tap here" <strong>for every number</strong> except <strong id="omitDisplay">3</strong>.</p> 
+        <p>If you see the number 3, DO NOT press.</p>
+        <p>Give equal importance to accuracy and speed.</p>
+        <p>You will start with a short practice. Once you finish the short practice, the main task will begin automatically.</p>
+        <p>Feedback will be provided only for the practice section not during the main task.</p>
+        </p>Press Start when you're ready.</p>
+      </div>
+      <div style="margin-top:1rem">
+        <button id="startBtn" class="btn">Start</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="responseBar" class="response-bar hidden" role="button" aria-label="response button">TAP HERE</div>
+<footer id="footer"></footer>
+
+<script>
+const CONFIG = {
+  blocks: 1,
+  reps: 5,
+  omitNum: 3,
+  practice: true,
+  practiceReps: 1,
+  showFeedback: true,
+  numDisplayMs: 250,
+  maskDisplayMs: 900,
+  googleScriptURL: "https://script.google.com/macros/s/AKfycbzTHPn1CNeP6npBztOiN4dr1LPTRi0LOiI-s6vCwqeYVJF0BebeWYMTeDdAO3i-xQ4bwQ/exec"
+};
+
+document.getElementById('omitDisplay').textContent = CONFIG.omitNum;
+
+let state = {
+  sensorId: null,
+  trials: [],
+  started: false,
+  currentTrialIndex: 0,
+  isPractice: false,
+  practiceSeq: [],
+  mainSeq: []
+};
+
+function makeSequence(reps) {
+  const numbers = [1,2,3,4,5,6,7,8,9];
+  let seq = [];
+  for (let r=0; r<reps; r++) {
+    const copy = numbers.slice();
+    shuffleArray(copy);
+    seq = seq.concat(copy);
+  }
+  return seq;
+}
+
+function shuffleArray(a) {
+  for (let i=a.length-1; i>0; i--) {
+    const j = Math.floor(Math.random() * (i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+const startBtn = document.getElementById('startBtn');
+const stage = document.getElementById('stage');
+const responseBar = document.getElementById('responseBar');
+
+async function collectParticipantInfo() {
+  const sensorId = prompt("Sensor ID:", "");
+  if (!sensorId) { alert("Sensor ID is required."); return null; }
+  let gender = "";
+while (true) {
+  gender = prompt("Sex (M/F):", "").trim().toUpperCase();
+  if (gender === "M" || gender === "F") break;
+  alert("Please enter only 'M' or 'F'.");
+}
+  const age = prompt("Age:");
+  return { sensorId, gender, age };
+}
+
+startBtn.addEventListener('click', async () => {
+  if (localStorage.getItem('sart_submitted')) {
+    if (!confirm("This device already submitted data previously!")) return;
+  }
+  const p = await collectParticipantInfo();
+  if (!p) return;
+  state.participant = p;
+  startBtn.disabled = true;
+  startBtn.textContent = "Preparing...";
+  startTask();
+});
+
+function startTask() {
+  state.started = true;
+  stage.innerHTML = `<div class="center"><div id="display" class="big-number">Get Ready...</div><div id="feedback" class="mask"></div></div>`;
+  responseBar.classList.remove('hidden');
+  responseBar.onclick = handleTap;
+  state.trials = [];
+
+  if (CONFIG.practice) {
+    state.isPractice = true;
+    state.practiceSeq = makeSequence(CONFIG.practiceReps);
+    state.currentTrialIndex = 0;
+    showMessage("Practice Starts", runNextTrial);
+  } else {
+    startMainTask();
+  }
+}
+
+function showMessage(text, callback) {
+  const display = document.getElementById('display');
+  display.textContent = text;
+  setTimeout(callback, 1000);
+}
+
+function startMainTask() {
+  state.isPractice = false;
+  state.currentTrialIndex = 0;
+  state.mainSeq = [];
+  for (let b=1; b<=CONFIG.blocks; b++) {
+    state.mainSeq = state.mainSeq.concat(makeSequence(CONFIG.reps));
+  }
+  showMessage("Main Task Starts", runNextTrial);
+}
+
+let trialStartPerf = 0, tapRegistered = false;
+
+function runNextTrial() {
+  let seq = state.isPractice ? state.practiceSeq : state.mainSeq;
+  if (state.currentTrialIndex >= seq.length) {
+    if (state.isPractice) {
+      showMessage("Practice Over", startMainTask);
+      return;
+    } else {
+      finishTask();
+      return;
+    }
+  }
+
+  const number = seq[state.currentTrialIndex];
+  showNumberTrial(number, state.isPractice, 0, () => {
+    state.currentTrialIndex += 1;
+    setTimeout(runNextTrial, 50);
+  });
+}
+
+function showNumberTrial(number, isPractice, blockNumber, onDone) {
+  const display = document.getElementById('display');
+  const feedback = document.getElementById('feedback');
+  tapRegistered = false;
+  trialStartPerf = performance.now();
+  display.textContent = number;
+  feedback.textContent = "";
+
+  const responseWindowMs = CONFIG.numDisplayMs + CONFIG.maskDisplayMs;
+
+  let trialData = {
+    block: blockNumber,
+    practice: isPractice,
+    trialNumber_global: state.currentTrialIndex + 1,
+    number,
+    omitNum: CONFIG.omitNum,
+    respAcc: null,
+    respRt: null,
+    startTimeMs: Date.now()
+  };
+
+  function registerTap() {
+    if (tapRegistered) return;
+    const rt = performance.now() - trialStartPerf;
+    tapRegistered = true;
+    trialData.respRt = Math.round(rt);
+    trialData.respAcc = (number === CONFIG.omitNum) ? 0 : 1;
+    if (isPractice && CONFIG.showFeedback) {
+      feedback.textContent = trialData.respAcc ? "CORRECT" : "INCORRECT";
+      feedback.style.color = trialData.respAcc ? "#0f0" : "#f44";
+    }
+  }
+
+  const onTapOnce = (e) => { registerTap(); };
+  responseBar.addEventListener('touchstart', onTapOnce, { passive: true });
+  responseBar.addEventListener('mousedown', onTapOnce);
+
+  setTimeout(() => {
+    display.textContent = "";
+    feedback.textContent = "●";
+    feedback.style.color = "#fff";
+    feedback.style.opacity = 0.7;
+  }, CONFIG.numDisplayMs);
+
+  setTimeout(() => {
+    responseBar.removeEventListener('touchstart', onTapOnce);
+    responseBar.removeEventListener('mousedown', onTapOnce);
+    if (!tapRegistered) {
+      trialData.respRt = null;
+      trialData.respAcc = (number === CONFIG.omitNum) ? 1 : 0;
+      if (isPractice && CONFIG.showFeedback) {
+        feedback.textContent = trialData.respAcc ? "CORRECT" : "INCORRECT";
+        feedback.style.color = trialData.respAcc ? "#0f0" : "#f44";
+      }
+    }
+    trialData.endTimeMs = Date.now();
+    state.trials.push(trialData);
+    display.textContent = "";
+    setTimeout(() => { feedback.textContent = ""; onDone(); }, 80);
+  }, responseWindowMs);
+}
+
+function handleTap(e) {}
+
+function finishTask() {
+  responseBar.classList.add('hidden');
+
+  // --- FILTER ONLY MAIN TASK TRIALS ---
+  const mainTrials = state.trials.filter(t => !t.practice);
+
+  const totalTrials = mainTrials.length;
+  const correctTrials = mainTrials.filter(t => t.respAcc == 1).length;
+  const wrongTrials = mainTrials.filter(t => t.respAcc == 0).length;
+
+  const allResponses = mainTrials.map(t => t.respAcc !== null ? t.respAcc : "NA").join(",");
+
+  // Record RTs for correct "Go" trials; mark correct "No-Go" as 'NG'
+  const reactionTimesArray = mainTrials.map(t => {
+    if (t.respAcc == 1 && t.respRt !== null && t.number !== CONFIG.omitNum) {
+      return t.respRt;
+    } else if (t.respAcc == 1 && t.number === CONFIG.omitNum) {
+      return "NG";
+    } else {
+      return "NA";
+    }
+  });
+
+  const reactionTimes = reactionTimesArray.join(",");
+
+  // Compute mean RT for correct "Go" responses only
+  const goRTs = mainTrials
+    .filter(t => t.respAcc == 1 && t.number !== CONFIG.omitNum && t.respRt !== null)
+    .map(t => t.respRt);
+
+  const meanCorrectRT = goRTs.length > 0
+    ? Math.round(goRTs.reduce((a, b) => a + b, 0) / goRTs.length)
+    : "NA";
+
+  stage.innerHTML = `<div class="center">
+    <h2 style="font-size:6vw">Done</h2>
+    <p class="small">Trials: ${totalTrials}</p>
+    <p class="small">Correct: ${correctTrials}</p>
+    <p class="small">Wrong: ${wrongTrials}</p>
+    <p class="small">Participant: ${escapeHTML(state.participant.pid)}</p>
+    <div style="margin-top:0.6rem">
+      <button id="submitBtn" class="btn">Submit Results</button>
+    </div>
+  </div>`;
+
+  document.getElementById('submitBtn').addEventListener('click', submitDataToGoogleSheet);
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+function submitDataToGoogleSheet() {
+  if (localStorage.getItem('sart_submitted')) {
+    alert("This device has already submitted.");
+    return;
+  }
+
+  // --- FILTER ONLY MAIN TASK TRIALS ---
+  const mainTrials = state.trials.filter(t => !t.practice);
+
+  const correctTrials = mainTrials.filter(t => t.respAcc == 1).length;
+  const wrongTrials = mainTrials.filter(t => t.respAcc == 0).length;
+  const allResponses = mainTrials.map(t => t.respAcc !== null ? t.respAcc : "NA").join(",");
+
+  const reactionTimesArray = mainTrials.map(t => {
+    if (t.respAcc == 1 && t.respRt !== null && t.number !== CONFIG.omitNum) {
+      return t.respRt;
+    } else if (t.respAcc == 1 && t.number === CONFIG.omitNum) {
+      return "NG";
+    } else {
+      return "NA";
+    }
+  });
+
+  const reactionTimes = reactionTimesArray.join(",");
+
+  const goRTs = mainTrials
+    .filter(t => t.respAcc == 1 && t.number !== CONFIG.omitNum && t.respRt !== null)
+    .map(t => t.respRt);
+
+  const meanCorrectRT = goRTs.length > 0
+    ? Math.round(goRTs.reduce((a, b) => a + b, 0) / goRTs.length)
+    : "NA";
+
+  const payload = {
+    sensor_id: state.participant.sensorId,
+    sex: state.participant.gender,
+    age: state.participant.age,
+    correct_replies: correctTrials,
+    wrong_replies: wrongTrials,
+    total_trials: mainTrials.length,
+    all_responses: allResponses,
+    reaction_times: reactionTimes,
+    mean_correct_rt: meanCorrectRT // ✅ mean RT for Go trials only
+  };
+
+  fetch(CONFIG.googleScriptURL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  .then(() => {
+    alert("✅ Data saved to Google Sheet!");
+    localStorage.setItem('sart_submitted', '1');
+  })
+  .catch(err => {
+    alert("Error sending data.");
+    console.error(err);
+  });
+}
+</script>
+</body>
+</html>
