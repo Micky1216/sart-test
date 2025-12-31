@@ -26,12 +26,13 @@
     <div id="stage">
       <h1 style="font-size:6vw">SART</h1>
       <div id="instructions" class="instr center">
-        <p>Press the big bar "Tap here" <strong>for every number</strong> except <strong id="omitDisplay">3</strong>.</p> 
-        <p>If you see the number 3, DO NOT press.</p>
-        <p>Give equal importance to accuracy and speed.</p>
-        <p>You will start with a short practice. Once you finish the short practice, the main task will begin automatically.</p>
-        <p>Feedback will be provided only for the practice section not during the main task.</p>
-        </p>Press Start when you're ready.</p>
+        <p>A single number from 1 to 9 will be displayed on the screen.</p>
+        <p>Press the big bar labeled <strong>“Tap here”</strong> for <strong>every number</strong> except <strong id="omitDisplay">3</strong>.</p>
+        <p>If the number is <strong>3</strong>, do <strong>not</strong> press.</p>
+        <p>Respond as <strong>quickly and accurately</strong> as possible.</p>
+        <p>You will begin with a short practice. The main task will start automatically after the practice.</p>
+        <p>Feedback is provided during practice only.</p>
+        <p>Press <strong>Start</strong> when you are ready.</p>
       </div>
       <div style="margin-top:1rem">
         <button id="startBtn" class="btn">Start</button>
@@ -272,7 +273,6 @@ function finishTask() {
     <p class="small">Trials: ${totalTrials}</p>
     <p class="small">Correct: ${correctTrials}</p>
     <p class="small">Wrong: ${wrongTrials}</p>
-    <p class="small">Participant: ${escapeHTML(state.participant.pid)}</p>
     <div style="margin-top:0.6rem">
       <button id="submitBtn" class="btn">Submit Results</button>
     </div>
@@ -348,3 +348,4 @@ function submitDataToGoogleSheet() {
 </script>
 </body>
 </html>
+
